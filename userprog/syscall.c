@@ -13,6 +13,10 @@
 #include "filesys/file.h"
 #include "devices/input.h"
 
+#ifdef VM
+#include "vm/page.h"
+#endif
+
 struct file_descriptor
 {
   int fd_num;
@@ -30,6 +34,13 @@ struct list open_files;
 struct lock fs_lock;
 
 static void syscall_handler (struct intr_frame *);
+
+/* vm 구현하는데 필요한 것들 */
+static void check_user (const uint8_t *uaddr);
+static int32_t get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
+static int memread_user (void *src, void *des, size_t bytes);
+
 
 /* System call functions */
 static void halt (void);
@@ -52,6 +63,17 @@ static void close_open_file (int);
 bool is_valid_ptr (const void *);
 static int allocate_fd (void);
 void close_file_by_owner (tid_t);
+
+#ifdef VM
+mmapid_t sys_mmap(int fd, void *);
+bool sys_munmap(mmapid_t);
+
+static struct mmap_desc* find_mmap_desc(struct thread *, mmapid_t fd);
+
+void preload_and_pin_pages(const void *, size_t);
+void unpin_preloaded_pages(const void *, size_t);
+#endif
+
 
 void
 syscall_init (void) 

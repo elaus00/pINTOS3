@@ -6,4 +6,4 @@ typedef int pid_t;
 void syscall_init (void);
 void close_file_by_owner (int);
 
-#endif /* userprog/syscall.h */
+#endif

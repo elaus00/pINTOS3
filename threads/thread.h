@@ -145,6 +145,8 @@ struct thread
 
     /* file struct represents the execuatable of the current thread */ 
     struct file *exec_file;
+
+    uint8_t *current_esp; 
 #endif
 
 #ifdef VM
