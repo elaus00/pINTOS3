@@ -7,6 +7,8 @@
 
 #include "threads/synch.h"
 #include "filesys/file.h"
+#include "vm/page.h"
+
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -20,6 +22,8 @@ enum thread_status
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
+typedef int mapid_t;
+
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
@@ -145,11 +149,20 @@ struct thread
 
     /* file struct represents the execuatable of the current thread */ 
     struct file *exec_file;
+
+   /* supplemental page table, which stores as hash table */
+    struct hash suppl_page_table;
+    
+    /* Memory Maped Files table */
+    mapid_t mapid_allocator;
+    struct hash mmfiles; 
 #endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

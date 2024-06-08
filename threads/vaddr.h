@@ -19,6 +19,7 @@
 #define PGBITS  12                         /* Number of offset bits. */
 #define PGSIZE  (1 << PGBITS)              /* Bytes in a page. */
 #define PGMASK  BITMASK(PGSHIFT, PGBITS)   /* Page offset bits (0:12). */
+#define MAX_STACK_SIZE (8 * 1024 * 1024)  /* 최대 스택 사이즈 추가 (8 MB) */
 
 bool is_valid_ptr (const void *);
 
@@ -87,5 +88,8 @@ vtop (const void *vaddr)
 
   return (uintptr_t) vaddr - (uintptr_t) PHYS_BASE;
 }
+
+
+
 
 #endif /* threads/vaddr.h */

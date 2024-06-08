@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "page.h": "c",
+        "interrupt.h": "c",
+        "vector": "c",
+        "system_error": "c",
+        "thread": "c",
+        "hash.h": "c",
+        "pagedir.h": "c",
+        "exception.h": "c",
+        "swap.h": "c"
+    }
+}
