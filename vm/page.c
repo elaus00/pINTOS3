@@ -10,26 +10,13 @@
 #include "vm/frame.h"
 #include "filesys/file.h"
 
-// Hash functions for the supplemental page table
-static unsigned spte_hash_func(const struct hash_elem *elem, void *aux);
-static bool     spte_less_func(const struct hash_elem *, const struct hash_elem *, void *aux);
-static void     spte_destroy_func(struct hash_elem *elem, void *aux);
 
 // Create a new supplemental page table
 struct supplemental_page_table* vm_supt_create (void)
 {
   struct supplemental_page_table *supt =
     (struct supplemental_page_table*) malloc(sizeof(struct supplemental_page_table));
-  hash_init (&supt->page_map, spte_hash_func, spte_less_func, NULL);
   return supt;
-}
-
-// Destroy a supplemental page table
-void vm_supt_destroy (struct supplemental_page_table *supt)
-{
-  ASSERT (supt != NULL);
-  hash_destroy (&supt->page_map, spte_destroy_func);
-  free (supt);
 }
 
 // Install a frame in the supplemental page table
@@ -113,13 +100,6 @@ struct supplemental_page_table_entry* vm_supt_lookup (struct supplemental_page_t
   return hash_entry(elem, struct supplemental_page_table_entry, elem);
 }
 
-// Check if an entry exists in the supplemental page table
-bool vm_supt_has_entry (struct supplemental_page_table *supt, void *page)
-{
-  struct supplemental_page_table_entry *spte = vm_supt_lookup(supt, page);
-  if(spte == NULL) return false;
-  return true;
-}
 
 // Set the dirty bit for a page in the supplemental page table
 bool vm_supt_set_dirty (struct supplemental_page_table *supt, void *page, bool value)
@@ -262,33 +242,4 @@ void vm_unpin_page(struct supplemental_page_table *supt, void *page)
   if (spte->status == ON_FRAME) {
     vm_frame_unpin (spte->kpage);
   }
-}
-
-// Hash function for supplemental page table entries
-static unsigned spte_hash_func(const struct hash_elem *elem, void *aux UNUSED)
-{
-  struct supplemental_page_table_entry *entry = hash_entry(elem, struct supplemental_page_table_entry, elem);
-  return hash_int( (int)entry->upage );
-}
-
-// Comparison function for supplemental page table entries
-static bool spte_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
-{
-  struct supplemental_page_table_entry *a_entry = hash_entry(a, struct supplemental_page_table_entry, elem);
-  struct supplemental_page_table_entry *b_entry = hash_entry(b, struct supplemental_page_table_entry, elem);
-  return a_entry->upage < b_entry->upage;
-}
-
-// Destruction function for supplemental page table entries
-static void spte_destroy_func(struct hash_elem *elem, void *aux UNUSED)
-{
-  struct supplemental_page_table_entry *entry = hash_entry(elem, struct supplemental_page_table_entry, elem);
-  if (entry->kpage != NULL) {
-    ASSERT (entry->status == ON_FRAME);
-    vm_frame_remove_entry (entry->kpage);
-  }
-  else if(entry->status == ON_SWAP) {
-    vm_swap_free (entry->swap_index);
-  }
-  free (entry);
 }

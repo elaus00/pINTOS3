@@ -611,7 +611,6 @@ mmapid_t sys_mmap(int fd, void *upage) {
   size_t offset;
   for (offset = 0; offset < file_size; offset += PGSIZE) {
     void *addr = upage + offset;
-    if (vm_supt_has_entry(curr->supt, addr)) goto MMAP_FAIL;
   }
 
   // Now, map each page to filesystem

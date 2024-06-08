@@ -36,7 +36,6 @@ struct supplemental_page_table_entry
   };
 
 struct supplemental_page_table* vm_supt_create (void);
-void vm_supt_destroy (struct supplemental_page_table *);
 
 bool vm_supt_install_frame (struct supplemental_page_table *supt, void *upage, void *kpage);
 bool vm_supt_install_zeropage (struct supplemental_page_table *supt, void *);
@@ -45,7 +44,6 @@ bool vm_supt_install_filesys (struct supplemental_page_table *supt, void *page,
     struct file * file, off_t offset, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
 
 struct supplemental_page_table_entry* vm_supt_lookup (struct supplemental_page_table *supt, void *);
-bool vm_supt_has_entry (struct supplemental_page_table *, void *page);
 
 bool vm_supt_set_dirty (struct supplemental_page_table *supt, void *, bool);
 

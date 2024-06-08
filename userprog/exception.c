@@ -170,6 +170,9 @@ page_fault(struct intr_frame *f)
       f->eax = 0xffffffff;
       return;
     }
+// else {
+//   kill(f);
+// }
   }
 
 #endif
