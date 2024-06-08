@@ -10,10 +10,12 @@
 #include "vm/frame.h"
 #include "filesys/file.h"
 
+// Hash functions for the supplemental page table
 static unsigned spte_hash_func(const struct hash_elem *elem, void *aux);
 static bool     spte_less_func(const struct hash_elem *, const struct hash_elem *, void *aux);
 static void     spte_destroy_func(struct hash_elem *elem, void *aux);
 
+// Create a new supplemental page table
 struct supplemental_page_table* vm_supt_create (void)
 {
   struct supplemental_page_table *supt =
@@ -22,6 +24,7 @@ struct supplemental_page_table* vm_supt_create (void)
   return supt;
 }
 
+// Destroy a supplemental page table
 void vm_supt_destroy (struct supplemental_page_table *supt)
 {
   ASSERT (supt != NULL);
@@ -29,6 +32,7 @@ void vm_supt_destroy (struct supplemental_page_table *supt)
   free (supt);
 }
 
+// Install a frame in the supplemental page table
 bool vm_supt_install_frame (struct supplemental_page_table *supt, void *upage, void *kpage)
 {
   struct supplemental_page_table_entry *spte;
@@ -49,6 +53,7 @@ bool vm_supt_install_frame (struct supplemental_page_table *supt, void *upage, v
   }
 }
 
+// Install a zero page in the supplemental page table
 bool vm_supt_install_zeropage (struct supplemental_page_table *supt, void *upage)
 {
   struct supplemental_page_table_entry *spte;
@@ -64,6 +69,7 @@ bool vm_supt_install_zeropage (struct supplemental_page_table *supt, void *upage
   return false;
 }
 
+// Set a swap entry in the supplemental page table
 bool vm_supt_set_swap (struct supplemental_page_table *supt, void *page, swap_index_t swap_index)
 {
   struct supplemental_page_table_entry *spte;
@@ -75,6 +81,7 @@ bool vm_supt_set_swap (struct supplemental_page_table *supt, void *page, swap_in
   return true;
 }
 
+// Install a file-backed page in the supplemental page table
 bool vm_supt_install_filesys (struct supplemental_page_table *supt, void *upage,
     struct file * file, off_t offset, uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
@@ -96,6 +103,7 @@ bool vm_supt_install_filesys (struct supplemental_page_table *supt, void *upage,
   return false;
 }
 
+// Look up an entry in the supplemental page table
 struct supplemental_page_table_entry* vm_supt_lookup (struct supplemental_page_table *supt, void *page)
 {
   struct supplemental_page_table_entry spte_temp;
@@ -105,6 +113,7 @@ struct supplemental_page_table_entry* vm_supt_lookup (struct supplemental_page_t
   return hash_entry(elem, struct supplemental_page_table_entry, elem);
 }
 
+// Check if an entry exists in the supplemental page table
 bool vm_supt_has_entry (struct supplemental_page_table *supt, void *page)
 {
   struct supplemental_page_table_entry *spte = vm_supt_lookup(supt, page);
@@ -112,6 +121,7 @@ bool vm_supt_has_entry (struct supplemental_page_table *supt, void *page)
   return true;
 }
 
+// Set the dirty bit for a page in the supplemental page table
 bool vm_supt_set_dirty (struct supplemental_page_table *supt, void *page, bool value)
 {
   struct supplemental_page_table_entry *spte = vm_supt_lookup(supt, page);
@@ -122,6 +132,7 @@ bool vm_supt_set_dirty (struct supplemental_page_table *supt, void *page, bool v
 
 static bool vm_load_page_from_filesys(struct supplemental_page_table_entry *, void *);
 
+// Load a page into memory
 bool vm_load_page(struct supplemental_page_table *supt, uint32_t *pagedir, void *upage)
 {
   struct supplemental_page_table_entry *spte;
@@ -168,6 +179,7 @@ bool vm_load_page(struct supplemental_page_table *supt, uint32_t *pagedir, void 
   return true;
 }
 
+// Unmap a memory-mapped file
 bool vm_supt_mm_unmap(
     struct supplemental_page_table *supt, uint32_t *pagedir,
     void *page, struct file *f, off_t offset, size_t bytes)
@@ -217,6 +229,7 @@ bool vm_supt_mm_unmap(
   return true;
 }
 
+// Load a page from the file system into memory
 static bool vm_load_page_from_filesys(struct supplemental_page_table_entry *spte, void *kpage)
 {
   file_seek (spte->file, spte->file_offset);
@@ -228,6 +241,7 @@ static bool vm_load_page_from_filesys(struct supplemental_page_table_entry *spte
   return true;
 }
 
+// Pin a page in the supplemental page table
 void vm_pin_page(struct supplemental_page_table *supt, void *page)
 {
   struct supplemental_page_table_entry *spte;
@@ -239,6 +253,7 @@ void vm_pin_page(struct supplemental_page_table *supt, void *page)
   vm_frame_pin (spte->kpage);
 }
 
+// Unpin a page in the supplemental page table
 void vm_unpin_page(struct supplemental_page_table *supt, void *page)
 {
   struct supplemental_page_table_entry *spte;
@@ -249,12 +264,14 @@ void vm_unpin_page(struct supplemental_page_table *supt, void *page)
   }
 }
 
+// Hash function for supplemental page table entries
 static unsigned spte_hash_func(const struct hash_elem *elem, void *aux UNUSED)
 {
   struct supplemental_page_table_entry *entry = hash_entry(elem, struct supplemental_page_table_entry, elem);
   return hash_int( (int)entry->upage );
 }
 
+// Comparison function for supplemental page table entries
 static bool spte_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
 {
   struct supplemental_page_table_entry *a_entry = hash_entry(a, struct supplemental_page_table_entry, elem);
@@ -262,6 +279,7 @@ static bool spte_less_func(const struct hash_elem *a, const struct hash_elem *b,
   return a_entry->upage < b_entry->upage;
 }
 
+// Destruction function for supplemental page table entries
 static void spte_destroy_func(struct hash_elem *elem, void *aux UNUSED)
 {
   struct supplemental_page_table_entry *entry = hash_entry(elem, struct supplemental_page_table_entry, elem);

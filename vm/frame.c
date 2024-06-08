@@ -11,14 +11,19 @@
 #include "threads/vaddr.h"
 #include "vm/swap.h"
 
+// Lock for synchronizing frame operations
 static struct lock frame_lock;
+// Hash table to map physical addresses to frame table entries
 static struct hash frame_map;
+// List of frames for the clock eviction algorithm
 static struct list frame_list;
+// Pointer for the clock algorithm
 static struct list_elem *clock_ptr;
 
 static unsigned frame_hash_func(const struct hash_elem *elem, void *aux);
 static bool frame_less_func(const struct hash_elem *, const struct hash_elem *, void *aux);
 
+// Frame table entry structure
 struct frame_table_entry {
   void *kpage;
   struct hash_elem helem;
@@ -31,6 +36,7 @@ struct frame_table_entry {
 static struct frame_table_entry* pick_frame_to_evict(uint32_t* pagedir);
 static void vm_frame_do_free(void *kpage, bool free_page);
 
+// Initialize the frame table
 void vm_frame_init() {
   lock_init(&frame_lock);
   hash_init(&frame_map, frame_hash_func, frame_less_func, NULL);
@@ -38,6 +44,7 @@ void vm_frame_init() {
   clock_ptr = NULL;
 }
 
+// Allocate a frame and map it to a user page
 void* vm_frame_allocate(enum palloc_flags flags, void *upage) {
   lock_acquire(&frame_lock);
   void *frame_page = palloc_get_page(PAL_USER | flags);
@@ -71,18 +78,21 @@ void* vm_frame_allocate(enum palloc_flags flags, void *upage) {
   return frame_page;
 }
 
+// Free a frame
 void vm_frame_free(void *kpage) {
   lock_acquire(&frame_lock);
   vm_frame_do_free(kpage, true);
   lock_release(&frame_lock);
 }
 
+// Remove a frame table entry
 void vm_frame_remove_entry(void *kpage) {
   lock_acquire(&frame_lock);
   vm_frame_do_free(kpage, false);
   lock_release(&frame_lock);
 }
 
+// Free or remove a frame (internal function)
 void vm_frame_do_free(void *kpage, bool free_page) {
   ASSERT(lock_held_by_current_thread(&frame_lock) == true);
   ASSERT(is_kernel_vaddr(kpage));
@@ -101,6 +111,7 @@ void vm_frame_do_free(void *kpage, bool free_page) {
   free(f);
 }
 
+// Clock algorithm to select a frame to evict
 struct frame_table_entry* clock_frame_next(void);
 struct frame_table_entry* pick_frame_to_evict(uint32_t *pagedir) {
   size_t n = hash_size(&frame_map);
@@ -117,6 +128,8 @@ struct frame_table_entry* pick_frame_to_evict(uint32_t *pagedir) {
   }
   PANIC("Can't evict any frame -- Not enough memory!\n");
 }
+
+// Move the clock hand to the next frame
 struct frame_table_entry* clock_frame_next(void) {
   if (list_empty(&frame_list))
     PANIC("Frame table is empty, can't happen - there is a leak somewhere");
@@ -128,6 +141,7 @@ struct frame_table_entry* clock_frame_next(void) {
   return e;
 }
 
+// Set a frame as pinned or unpinned
 static void vm_frame_set_pinned(void *kpage, bool new_value) {
   lock_acquire(&frame_lock);
   struct frame_table_entry f_tmp;
@@ -150,10 +164,13 @@ void vm_frame_pin(void* kpage) {
   vm_frame_set_pinned(kpage, true);
 }
 
+// Hash function for frame map
 static unsigned frame_hash_func(const struct hash_elem *elem, void *aux UNUSED) {
   struct frame_table_entry *entry = hash_entry(elem, struct frame_table_entry, helem);
   return hash_bytes(&entry->kpage, sizeof entry->kpage);
 }
+
+// Comparison function for frame map
 static bool frame_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
   struct frame_table_entry *a_entry = hash_entry(a, struct frame_table_entry, helem);
   struct frame_table_entry *b_entry = hash_entry(b, struct frame_table_entry, helem);
