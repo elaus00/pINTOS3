@@ -152,7 +152,6 @@ struct thread
 #endif
 
 #ifdef VM
-    
     struct supplemental_page_table *supt;
     struct list mmap_list; 
 #endif

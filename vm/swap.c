@@ -78,12 +78,8 @@ void vm_swap_in(swap_index_t swap_index, void *page) {
 // Free a swap slot
 void vm_swap_free(swap_index_t swap_index) {
   ASSERT(swap_index < swap_size);
-  
-  // Check if the swap slot is assigned
-  if (bitmap_test(swap_available, swap_index) == true) {
+  if (!bitmap_test(swap_available, swap_index)) {
     PANIC("Error, invalid free request to unassigned swap block");
   }
-  
-  // Mark the swap slot as available
   bitmap_set(swap_available, swap_index, true);
 }

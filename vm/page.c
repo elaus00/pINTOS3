@@ -224,22 +224,18 @@ static bool vm_load_page_from_filesys(struct supplemental_page_table_entry *spte
 // Pin a page in the supplemental page table
 void vm_pin_page(struct supplemental_page_table *supt, void *page)
 {
-  struct supplemental_page_table_entry *spte;
-  spte = vm_supt_lookup(supt, page);
-  if(spte == NULL) {
-    return;
+  struct supplemental_page_table_entry *spte = vm_supt_lookup(supt, page);
+  if(spte && spte->status == ON_FRAME) {
+    vm_frame_pin(spte->kpage);
   }
-  ASSERT (spte->status == ON_FRAME);
-  vm_frame_pin (spte->kpage);
 }
 
 // Unpin a page in the supplemental page table
 void vm_unpin_page(struct supplemental_page_table *supt, void *page)
 {
-  struct supplemental_page_table_entry *spte;
-  spte = vm_supt_lookup(supt, page);
-  if(spte == NULL) PANIC ("request page is non-existent");
+  struct supplemental_page_table_entry *spte = vm_supt_lookup(supt, page);
+  if(!spte) PANIC("request page is non-existent");
   if (spte->status == ON_FRAME) {
-    vm_frame_unpin (spte->kpage);
+    vm_frame_unpin(spte->kpage);
   }
 }
