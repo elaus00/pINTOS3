@@ -22,3 +22,24 @@ struct mmap_desc {
 #endif
 
 #endif /* userprog/process.h */
+
+struct file_desc {
+  int id;
+  struct list_elem elem;
+  struct file* file;
+  struct dir* dir;
+};
+
+
+#ifdef VM
+typedef int mmapid_t;
+
+struct mmap_desc {
+  mmapid_t id;
+  struct list_elem elem;
+  struct file* file;
+
+  void *addr;   // where it is mapped to? store the user virtual address
+  size_t size;  // file size
+};
+#endif

@@ -146,8 +146,7 @@ vm_supt_install_filesys (struct supplemental_page_table *supt, void *upage,
  * Lookup the SUPT and find a SPTE object given the user page address.
  * returns NULL if no such entry is found.
  */
-struct supplemental_page_table_entry*
-vm_supt_lookup (struct supplemental_page_table *supt, void *page)
+struct supplemental_page_table_entry* vm_supt_lookup (struct supplemental_page_table *supt, void *page)
 {
   // create a temporary object, just for looking up the hash table.
   struct supplemental_page_table_entry spte_temp;
@@ -257,8 +256,7 @@ vm_load_page(struct supplemental_page_table *supt, uint32_t *pagedir, void *upag
   return true;
 }
 
-bool
-vm_supt_mm_unmap(
+bool vm_supt_mm_unmap(
     struct supplemental_page_table *supt, uint32_t *pagedir,
     void *page, struct file *f, off_t offset, size_t bytes)
 {
