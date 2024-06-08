@@ -57,10 +57,6 @@ vm_frame_init ()
   clock_ptr = NULL;
 }
 
-/**
- * Allocate a new frame,
- * and return the address of the associated page.
- */
 void*
 vm_frame_allocate (enum palloc_flags flags, void *upage)
 {

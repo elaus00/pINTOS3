@@ -12,6 +12,7 @@
 #include "threads/malloc.h"
 #include "filesys/file.h"
 #include "devices/input.h"
+#include "vm/page.h"
 
 struct file_descriptor
 {
@@ -45,13 +46,37 @@ static int write (int, const void *, unsigned);
 static void seek (int, unsigned);
 static unsigned tell (int);
 static void close (int);
+static int memread_user (void *src, void *des, size_t bytes);
+
+enum fd_search_filter { FD_FILE = 1, FD_DIRECTORY = 2 };
+static struct file_desc* find_file_desc(struct thread *, int fd, enum fd_search_filter flag);
 /* End of system call functions */
+
+static int32_t get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
+static void check_user (const uint8_t *uaddr);
+static void fail_invalid_access(void);
+static int memread_user (void *src, void *dst, size_t bytes);
+static struct mmap_desc* find_mmap_desc(struct thread *t, mmapid_t mid);
+void preload_and_pin_pages(const void *buffer, size_t size);
+void unpin_preloaded_pages(const void *buffer, size_t size);
 
 static struct file_descriptor *get_open_file (int);
 static void close_open_file (int);
 bool is_valid_ptr (const void *);
 static int allocate_fd (void);
 void close_file_by_owner (tid_t);
+
+#ifdef VM
+mmapid_t sys_mmap(int fd, void *);
+bool sys_munmap(mmapid_t);
+
+static struct mmap_desc* find_mmap_desc(struct thread *, mmapid_t fd);
+
+void preload_and_pin_pages(const void *, size_t);
+void unpin_preloaded_pages(const void *, size_t);
+#endif
+
 
 void
 syscall_init (void) 
@@ -61,7 +86,7 @@ syscall_init (void)
   lock_init (&fs_lock);
 }
 
-static void
+static void 
 syscall_handler (struct intr_frame *f)
 {
   uint32_t *esp;
@@ -113,9 +138,30 @@ syscall_handler (struct intr_frame *f)
         case SYS_TELL:
           f->eax = tell (*(esp + 1));
           break;
-        case SYS_CLOSE:
+        case SYS_CLOSE:{
           close (*(esp + 1));
+          break;}
+        #ifdef VM
+        case SYS_MMAP:
+         {
+          int fd;
+          void *addr;
+          memread_user(f->esp + 4, &fd, sizeof(fd));
+          memread_user(f->esp + 8, &addr, sizeof(addr));
+
+          mmapid_t ret = sys_mmap (fd, addr);
+          f->eax = ret;
           break;
+        }
+        case SYS_MUNMAP:
+          {
+          mmapid_t mid;
+          memread_user(f->esp + 4, &mid, sizeof(mid));
+          sys_munmap(mid);
+          break;
+          }
+        #endif
+        
         default:
           break;
         }
@@ -452,4 +498,215 @@ close_file_by_owner (tid_t tid)
 	      }
       e = next;
     }
+}
+
+
+static int32_t get_user (const uint8_t *uaddr)
+{
+if (! ((void*)uaddr < PHYS_BASE)) {
+return -1;
+}
+int result;
+asm ("movl $1f, %0; movzbl %1, %0; 1:"
+: "=&a" (result) : "m" (*uaddr));
+return result;
+}
+
+static bool put_user (uint8_t *udst, uint8_t byte)
+{
+if (! ((void*)udst < PHYS_BASE)) {
+return false;
+}
+int error_code;
+asm ("movl $1f, %0; movb %b2, %1; 1:" : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+return error_code != -1;
+}
+
+static void check_user (const uint8_t *uaddr)
+{
+if (get_user (uaddr) == -1)
+fail_invalid_access();
+}
+
+static void fail_invalid_access(void) {
+if (lock_held_by_current_thread(&fs_lock))
+lock_release (&fs_lock);
+exit (-1);
+NOT_REACHED(); }
+
+static int
+memread_user (void *src, void *dst, size_t bytes)
+{
+  int32_t value;
+  size_t i;
+  for(i=0; i<bytes; i++) {
+    value = get_user(src + i);
+    if(value == -1) // segfault or invalid memory access
+      fail_invalid_access();
+
+    *(char*)(dst + i) = value & 0xff;
+  }
+  return (int)bytes;
+}
+
+static struct mmap_desc* find_mmap_desc(struct thread *t, mmapid_t mid)
+{
+ASSERT (t != NULL);
+struct list_elem *e;
+if (! list_empty(&t->mmap_list)) {
+for(e = list_begin(&t->mmap_list); e != list_end(&t->mmap_list); e = list_next(e))
+{
+struct mmap_desc *desc = list_entry(e, struct mmap_desc, elem);
+if(desc->id == mid) {
+return desc;
+}
+}
+}
+return NULL;
+}
+
+void preload_and_pin_pages(const void *buffer, size_t size)
+{
+struct supplemental_page_table *supt = thread_current()->supt;
+uint32_t *pagedir = thread_current()->pagedir;
+void *upage;
+for(upage = pg_round_down(buffer); upage < buffer + size; upage += PGSIZE)
+{
+vm_load_page (supt, pagedir, upage);
+vm_pin_page (supt, upage);
+}
+}
+
+void unpin_preloaded_pages(const void *buffer, size_t size)
+{
+struct supplemental_page_table *supt = thread_current()->supt;
+void *upage;
+for(upage = pg_round_down(buffer); upage < buffer + size; upage += PGSIZE){
+vm_unpin_page (supt, upage);
+}
+}
+
+#ifdef VM
+mmapid_t sys_mmap(int fd, void *upage) {
+  // check arguments
+  if (upage == NULL || pg_ofs(upage) != 0) return -1;
+  if (fd <= 1) return -1; // 0 and 1 are unmappable
+  struct thread *curr = thread_current();
+
+  lock_acquire (&fs_lock);
+
+  /* 1. Open file */
+  struct file *f = NULL;
+  struct file_desc* file_d = find_file_desc(thread_current(), fd, FD_FILE);
+  if(file_d && file_d->file) {
+    f = file_reopen (file_d->file);
+  }
+  if(f == NULL) goto MMAP_FAIL;
+
+  size_t file_size = file_length(f);
+  if(file_size == 0) goto MMAP_FAIL;
+
+  /* 2. Mapping memory pages */
+  // First, ensure that all the page address is NON-EXIESENT.
+  size_t offset;
+  for (offset = 0; offset < file_size; offset += PGSIZE) {
+    void *addr = upage + offset;
+    if (vm_supt_has_entry(curr->supt, addr)) goto MMAP_FAIL;
+  }
+
+  // Now, map each page to filesystem
+  for (offset = 0; offset < file_size; offset += PGSIZE) {
+    void *addr = upage + offset;
+
+    size_t read_bytes = (offset + PGSIZE < file_size ? PGSIZE : file_size - offset);
+    size_t zero_bytes = PGSIZE - read_bytes;
+
+    vm_supt_install_filesys(curr->supt, addr,
+        f, offset, read_bytes, zero_bytes, /*writable*/true);
+  }
+
+  /* 3. Assign mmapid */
+  mmapid_t mid;
+  if (! list_empty(&curr->mmap_list)) {
+    mid = list_entry(list_back(&curr->mmap_list), struct mmap_desc, elem)->id + 1;
+  }
+  else mid = 1;
+
+  struct mmap_desc *mmap_d = (struct mmap_desc*) malloc(sizeof(struct mmap_desc));
+  mmap_d->id = mid;
+  mmap_d->file = f;
+  mmap_d->addr = upage;
+  mmap_d->size = file_size;
+  list_push_back (&curr->mmap_list, &mmap_d->elem);
+
+  // OK, release and return the mid
+  lock_release (&fs_lock);
+  return mid;
+
+
+MMAP_FAIL:
+  // finally: release and return
+  lock_release (&fs_lock);
+  return -1;
+}
+
+bool sys_munmap(mmapid_t mid)
+{
+  struct thread *curr = thread_current();
+  struct mmap_desc *mmap_d = find_mmap_desc(curr, mid);
+
+  if(mmap_d == NULL) { // not found such mid
+    return false; // or fail_invalid_access() ?
+  }
+
+  lock_acquire (&fs_lock);
+  {
+    // Iterate through each page
+    size_t offset, file_size = mmap_d->size;
+    for(offset = 0; offset < file_size; offset += PGSIZE) {
+      void *addr = mmap_d->addr + offset;
+      size_t bytes = (offset + PGSIZE < file_size ? PGSIZE : file_size - offset);
+      vm_supt_mm_unmap (curr->supt, curr->pagedir, addr, mmap_d->file, offset, bytes);
+    }
+
+    // Free resources, and remove from the list
+    list_remove(& mmap_d->elem);
+    file_close(mmap_d->file);
+    free(mmap_d);
+  }
+  lock_release (&fs_lock);
+
+  return true;
+}
+
+
+#endif
+
+static struct file_desc*
+find_file_desc(struct thread *t, int fd, enum fd_search_filter flag)
+{
+  ASSERT (t != NULL);
+
+  if (fd < 3) {
+    return NULL;
+  }
+
+  struct list_elem *e;
+
+  if (! list_empty(&t->file_descriptors)) {
+    for(e = list_begin(&t->file_descriptors);
+        e != list_end(&t->file_descriptors); e = list_next(e))
+    {
+      struct file_desc *desc = list_entry(e, struct file_desc, elem);
+      if(desc->id == fd) {
+        // found. filter by flag to distinguish file and directorys
+        if (desc->dir != NULL && (flag & FD_DIRECTORY) )
+          return desc;
+        else if (desc->dir == NULL && (flag & FD_FILE) )
+          return desc;
+      }
+    }
+  }
+
+  return NULL; // not found
 }

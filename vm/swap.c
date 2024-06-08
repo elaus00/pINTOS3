@@ -14,19 +14,12 @@ static size_t swap_size;
 void
 vm_swap_init ()
 {
-  ASSERT (SECTORS_PER_PAGE > 0); // 4096/512 = 8?
-
-  // Initialize the swap disk
+  ASSERT (SECTORS_PER_PAGE > 0);
   swap_block = block_get_role(BLOCK_SWAP);
   if(swap_block == NULL) {
     PANIC ("Error: Can't initialize swap block");
     NOT_REACHED ();
   }
-
-  // Initialize swap_available, with all entry true
-  // each single bit of `swap_available` corresponds to a block region,
-  // which consists of contiguous [SECTORS_PER_PAGE] sectors,
-  // their total size being equal to PGSIZE.
   swap_size = block_size(swap_block) / SECTORS_PER_PAGE;
   swap_available = bitmap_create(swap_size);
   bitmap_set_all(swap_available, true);

@@ -145,14 +145,16 @@ struct thread
 
     /* file struct represents the execuatable of the current thread */ 
     struct file *exec_file;
+
+    struct list file_descriptors;
+
+    uint8_t *current_esp;
 #endif
 
 #ifdef VM
-    // Project 3: Supplemental page table.
-    struct supplemental_page_table *supt;   /* Supplemental Page Table. */
-
-    // Project 3: Memory Mapped Files.
-    struct list mmap_list;              /* List of struct mmap_desc. */
+    
+    struct supplemental_page_table *supt;
+    struct list mmap_list; 
 #endif
 
     /* Owned by thread.c. */
